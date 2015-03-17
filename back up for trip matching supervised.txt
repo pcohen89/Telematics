@@ -1,0 +1,81 @@
+
+# testing whether trip matching really works   
+import tripmatching as match
+reload(match) 
+df_triplevel = pd.read_csv(FULL_PATH + "/../TripsMaster" +
+                        str(1) + ".csv") 
+# create supervised data set
+ones = (df_triplevel['driver'] == 2)
+zeros = ((df_triplevel['driver'] > 1300) & (df_triplevel['trip'] == 1))
+# create rotation vars
+df_analysis = df_triplevel[ones | zeros]
+df_analysis = match.create_rotated(df_analysis)
+# create trip match for ones
+match.trip_match_driver(df_analysis, 2)
+# create match for zeros
+for driver in range(1300, 1501):
+    match.trip_match_driver_trip1(df_analysis, driver)
+df_triplevel = pd.read_csv(FULL_PATH + "/../TripsMaster_triplvl" +
+                        str(1) + ".csv") 
+ones = (df_triplevel['driver'] == 2)
+zeros = ((df_triplevel['driver'] > 1300) & (df_triplevel['trip'] == 1))
+df_analysis = df_triplevel[ones | zeros]
+del df_analysis['trip_match']
+# merge on trip of interest trip matching
+for trip in range(1, 201):
+    mtch = pd.read_csv("D:/Kaggle_data/Telematics/supervised_tripmatch/2_" + 
+                        str(trip) + ".csv")
+    conds = ((df_analysis['driver'] == 2) & (df_analysis['trip'] == trip))
+    df_analysis.ix[conds, 'trip_match'] = mtch['trip_match'][0]
+# merge in zero trips trip matching
+for driver in range(1300, 1501):
+    mtch = pd.read_csv("D:/Kaggle_data/Telematics/supervised_tripmatch/" +
+                        str(driver) + "_1.csv")
+    conds = ((df_analysis['driver'] == driver) & (df_analysis['trip'] == 1))
+    df_analysis.ix[conds, 'trip_match'] = mtch['trip_match'][0]
+    
+# create an outcome
+df_analysis['target'] =  df_analysis['driver'] == 2
+# model
+features = [# distance
+                 'fin_dist', 'tot_dist', 'fin_dist_quart1', 'fin_dist_quart2',
+                 'fin_dist_quart3', 'fin_dist_quart4',
+                 # speed
+                 'avg_spd',  'max_reasonable_spd', 'max_spd', 'std_spd',
+                 'avg_spd_quart1', 'avg_spd_quart2', 'avg_spd_quart3',
+                 'avg_spd_quart4',
+                 # accel
+                 'max_accel', 'std_accelpos_quart1', 'std_accelpos_quart2',
+                 'std_accelpos_quart3', 'std_accelpos_quart4', 'std_accelpos',
+                 'max_reasonable_accel', 'max_spdaccel', 'min_spdaccel',
+                 'avg_negaccel', 'avg_posaccel',
+                 # decel
+                 'min_decel_4avg', 'std_accelneg', 'min_reasonable_accel',
+                 # stops
+                 'avg_spd_nostopsouts', 'max_stopaccel', 'avg_stopaccel',
+                 'avg_stopposaccel',
+                 'full_stops',
+                 'unq_stops', 'pct_stopped', #'unq_stops_quart1',
+                 #'unq_stops_quart2', 'unq_stops_quart3', 'unq_stops_quart4',
+                 # turns
+                 'pct_shrp_trn', 'spd_shrp_turn', 
+                 'pct_ofturns_accel', 'amt_trn', 'amt_trn_quart1',
+                 'amt_trn_quart2', 'amt_trn_quart3', 'amt_trn_quart4',
+                 'num_wierdtrn180', 'num_wierdtrn360', 'std_smallturns',
+                 'std_allturns',
+                 # trip match
+                 'trip_match'
+                ]
+# fill any missings
+cols = df_analysis.columns                     
+for col in cols:
+    val = df_analysis[col].mean()
+    df_analysis[col].fillna(value= val, inplace=True) 
+    
+forst = RandomForestClassifier(n_estimators=5000, n_jobs=8,
+                                       max_depth=30)
+forst.fit(df_analysis[features], df_analysis['target'])
+for x in range(0, len(forst.feature_importances_)):
+    text1 = "Feature " + str(features[x])
+    text2 = " chosen " + str(forst.feature_importances_[x]) 
+    print  text1 + text2 + " times"   
